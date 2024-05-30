@@ -8,6 +8,8 @@ A Burp Suite extension for automatically encoding URLs, making web application e
 
 The goal of this extension is to enhance the readability and usability of URL parameters in Burp Suite's Repeater tool, facilitating easier analysis and exploitation of web applications.
 
+![poc-demo](static/poc.png)
+
 ## Installation
 
 ### Prerequisites
