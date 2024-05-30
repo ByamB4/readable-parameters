@@ -1,4 +1,7 @@
 from burp import IBurpExtender, IHttpListener
+from urllib import quote
+from collections import OrderedDict
+
 
 class BurpExtender(IBurpExtender, IHttpListener):
 
@@ -26,25 +29,42 @@ class BurpExtender(IBurpExtender, IHttpListener):
         body = request[request_data.getBodyOffset() :].tostring()
         return headers, body, method
 
+    def has_query(self, arg):
+        if "?" in arg and len(arg.split("?")[1]) > 2:
+            return True
+        return False
+
+    def encode_parameters(self, arg):
+        url_parts = arg.split("?", 1)
+        query_string = url_parts[1]
+        params = OrderedDict(param.split("=") for param in query_string.split("&"))
+        encoded_pairs = [quote(key) + "=" + quote(value) for key, value in params.items()]
+        encoded_query_string = "&".join(encoded_pairs)
+        return url_parts[0] + "?" + encoded_query_string
+
+    def get_url(self, arg):
+        start_index = arg.find(" ") + 1
+        end_index = arg.find("HTTP/") - 1
+        return arg[start_index:end_index]
+
+    def get_original_url(self, raw, encoded):
+        start_index = raw.find(" ") + 1
+        end_index = raw.find("HTTP/") - 1
+        updated = raw[:start_index] + encoded + raw[end_index:]
+        return updated
+
     def processHttpMessage(self, tool, is_request, content):
         if is_request and tool == self._callbacks.TOOL_REPEATER:
             headers, body, method = self.get_request_detail(content)
-            if '?' in headers[0]:
-                start_index = headers[0].find('?')+1
-                end_index = headers[0].find('HTTP/')-1
-                parameters = headers[0][start_index:end_index].split('&')
-                for param in parameters:
-                    _key, _value = param.split('=')
-                    print('_key', _key)
-                    print('_value', _value)
-
-            # new_header = []
-            # for header in headersheaders:
-            #     if 'If-None-Match: ' in header:
-            #         print('[debug] If-None-Match ' + str(headers[0]))
-            #     elif 'If-Modified-Since:' in header:
-            #         print('[debug] If-Modified-Match ' + str(headers[0]))
-            #     else:
-            #         new_header.append(header)
-            # new_request = self._helpers.buildHttpMessage(new_header, body)
-            # content.setRequest(new_request)
+            url = self.get_url(headers[0])
+            if self.has_query(url):
+                encoded = self.encode_parameters(url)
+                updated = self.get_original_url(headers[0], encoded)
+                new_header = [updated]
+                for i in range(1, len(headers)):
+                    new_header.append(headers[i])
+                new_request = self._helpers.buildHttpMessage(new_header, body)
+                content.setRequest(new_request)
+                print("[updated]", updated)
+            else:
+                print("[debug] no parameter")
